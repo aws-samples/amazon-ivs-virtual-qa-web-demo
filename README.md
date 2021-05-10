@@ -1,6 +1,8 @@
 # Amazon IVS Virtual Q&A web demo
-A demo web application intended as an educational tool for demonstrating how Amazon IVS, in conjunction with other AWS services, can be used to build a interactive question and answer polling customer experience.
+A demo web application intended as an educational tool for demonstrating how Amazon IVS, in conjunction with other AWS services, can be used to build a interactive virtual Q&A experience.
+
 **This project is intended for education purposes only and not for production usage.**
+
 This is a serverless web application, leveraging [AWS Lambda](https://aws.amazon.com/lambda/), [Amazon API Gateway](https://aws.amazon.com/api-gateway/), and [Amazon DynamoDB](https://aws.amazon.com/dynamodb/). The web user interface is a [single page application](https://en.wikipedia.org/wiki/Single-page_application) built using [responsive web design](https://en.wikipedia.org/wiki/Responsive_web_design) frameworks and techniques, producing a native app-like experience tailored to the user's device.
 
 
