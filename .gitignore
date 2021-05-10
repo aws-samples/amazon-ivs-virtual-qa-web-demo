@@ -1,0 +1,12 @@
+# dependencies
+/node_modules
+website/node_modules
+
+# production
+/build
+website/build
+website/src/backendStackOutput.json
+
+#misc
+.DS_Store
+packaged.yaml
