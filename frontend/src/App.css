@@ -1,0 +1,161 @@
+:root {
+  --section-max-width: 942px;
+  --question-list-padding: 30px 0 50px 0;
+  --player-wrapper-padding-top: 3rem;
+}
+
+@media (max-width: 942px) {
+  :root {
+    --question-list-padding: 30px 20px 50px 20px;
+    --player-wrapper-padding-top: 0rem;
+  }
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  position: fixed;
+}
+
+.modal__overlay {
+  position: fixed;
+}
+
+.modal__el--auth {
+  width: 450px;
+}
+
+/* Player */
+.player-wrapper {
+  position: relative;
+  padding-top: var(--player-wrapper-padding-top);
+}
+
+.current-question {
+  position: absolute;
+  bottom: 40px;
+  left: 25px;
+  right: 25px;
+  z-index: 1;
+  opacity: 0.95;
+}
+
+.c-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+}
+
+.c-item__card {
+  display: flex;
+  padding: 20px;
+  position: relative;
+  border-radius: 10px;
+  background: var(--color-text-inverted);
+}
+
+.c-item__votes {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-right: 20px;
+}
+
+.c-item__content {
+  word-break: break-word;
+}
+
+strong {
+  font-weight: 800;
+  font-size: 12px;
+}
+
+/* Questions List */
+.questions {
+  padding: var(--question-list-padding);
+}
+
+.q-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+}
+
+.q-item__card {
+  display: flex;
+  padding: 20px 20px 20px 50px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.08);
+  margin: 20px 0 10px 26px;
+  position: relative;
+  border-radius: 10px;
+  transition: all .10s ease-in-out;
+}
+
+.q-item__content {
+  word-break: break-word;
+}
+
+/* Upvote button */
+.upvote-btn {
+  width: 52px;
+  height: 52px;
+  position: absolute;
+  top: 50%;
+  left: -26px;
+  margin-top: -26px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.upvote-btn__svg {
+  fill: var(--color--tertiary);
+  transition: all .15s ease-in-out;
+}
+.upvote-btn__count {
+  font-size: 11px;
+}
+
+.btn--primary .upvote-btn__svg {
+  fill: var(--color-text-inverted);
+}
+
+.btn--primary:hover .upvote-btn__svg {
+  transform: translate3d(0, -1px, 0) scale(1.1);
+}
+
+.has-voted:hover .upvote-btn__svg {
+  transform: rotate(180deg);
+}
+
+.upvote-btn:disabled {
+  cursor: default;
+}
+
+.upvote-btn:disabled .upvote-btn__svg {
+  fill: var(--color--tertiary);
+}
+
+/* Moderation */
+.q-item__moderation {
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 20px;
+}
+
+.btn--icon {
+  display: flex;
+  justify-items: center;
+  justify-content: center;
+  align-items: center;
+  margin: 0 0 0 0.5rem;
+  padding: 0 1rem;
+}

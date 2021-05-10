@@ -1,0 +1,24 @@
+[
+    [
+        {
+            "OutputKey": "CognitoUserPoolId",
+            "OutputValue": ""
+        },
+        {
+            "OutputKey": "CognitoClientId",
+            "OutputValue": ""
+        },
+        {
+            "OutputKey": "HttpApiEndpoint",
+            "OutputValue": ""
+        },
+        {
+            "OutputKey": "Region",
+            "OutputValue": ""
+        },
+        {
+            "OutputKey": "WebsocketApiEndpoint",
+            "OutputValue": ""
+        }
+    ]
+]

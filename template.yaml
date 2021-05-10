@@ -1,0 +1,549 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: This template creates API Gateway, Lambda, Cognito, DynamoDB resources for the backend.
+
+
+Parameters:
+  Stage:
+    Type: String
+    Description: The stage where the application is running in, e.g., dev, prod.
+
+
+Resources:
+  # API Gateway
+  ApiGatewayAccount:
+    Type: "AWS::ApiGateway::Account"
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayPushToCloudWatchRole.Arn
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub question-vote-http-api-${Stage}
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowHeaders: 
+          - authorization
+          - content-type
+        AllowMethods: 
+          - POST
+        AllowOrigins: 
+          - '*'
+  HttpApiQuestionInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties: 
+      ApiId: !Ref HttpApi
+      Description: Question service lambda http api integration
+      IntegrationMethod: POST
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${QuestionServiceLambda.Arn}/invocations
+      PayloadFormatVersion: 1.0
+      TimeoutInMillis: 30000
+  HttpApiVoteInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties: 
+      ApiId: !Ref HttpApi
+      Description: Vote service lambda http api integration
+      IntegrationMethod: POST
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VoteServiceLambda.Arn}/invocations
+      PayloadFormatVersion: 1.0
+      TimeoutInMillis: 30000
+  HttpApiAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource: 
+        - $request.header.Authorization
+      JwtConfiguration: 
+        Audience:
+          - !Ref CognitoClient
+        Issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}
+      Name: !Sub question-vote-http-api-authorizer-${Stage}
+  HttpApiAddQuestionRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      RouteKey: POST /addQuestion
+      Target: !Sub integrations/${HttpApiQuestionInteg}
+  HttpApiAddVoteRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      RouteKey: POST /addVote
+      Target: !Sub integrations/${HttpApiVoteInteg}
+  HttpApiDeleteChannelQuestionsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      RouteKey: POST /deleteChannelQuestions
+      Target: !Sub integrations/${HttpApiQuestionInteg}
+  HttpApiDeleteQuestionRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      RouteKey: POST /deleteQuestion
+      Target: !Sub integrations/${HttpApiQuestionInteg}
+  HttpApiDeleteVoteRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      RouteKey: POST /deleteVote
+      Target: !Sub integrations/${HttpApiVoteInteg}
+  HttpApiGetVotesRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      RouteKey: POST /getVotes
+      Target: !Sub integrations/${HttpApiVoteInteg}
+  HttpApiSetCurrentQuestionRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: 
+      ApiId: !Ref HttpApi
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      RouteKey: POST /setCurrentQuestion
+      Target: !Sub integrations/${HttpApiQuestionInteg}
+  HttpApiDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+    - HttpApiAddQuestionRoute
+    - HttpApiAddVoteRoute
+    - HttpApiDeleteChannelQuestionsRoute
+    - HttpApiDeleteQuestionRoute
+    - HttpApiDeleteVoteRoute
+    - HttpApiGetVotesRoute
+    - HttpApiAddVoteRoute
+    Properties:
+      ApiId: !Ref HttpApi 
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Ref Stage
+      Description: !Sub ${Stage} stage
+      DeploymentId: !Ref HttpApiDeployment
+      AutoDeploy: true
+      ApiId: !Ref HttpApi
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
+        Format: $context.identity.sourceIp - - [$context.requestTime] "$context.httpMethod $context.routeKey $context.protocol" $context.status $context.responseLength $context.requestId
+
+  WebsocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub updates-websocket-api-${Stage}
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+  WebsocketConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebsocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      OperationName: WebsocketConnectRoute
+      Target: !Sub integrations/${WebsocketConnectInteg}
+  WebsocketConnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebsocketApi
+      Description: Connect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebsocketServiceLambda.Arn}/invocations
+  WebsocketDisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebsocketApi
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: WebsocketDisconnectRoute
+      Target: !Sub integrations/${WebsocketDisconnectInteg}
+  WebsocketDisconnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebsocketApi
+      Description: Disconnect Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebsocketServiceLambda.Arn}/invocations
+  WebsocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+    - WebsocketConnectRoute
+    - WebsocketDisconnectRoute
+    Properties:
+      ApiId: !Ref WebsocketApi
+  WebsocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Ref Stage
+      Description: !Sub ${Stage} stage
+      DeploymentId: !Ref WebsocketDeployment
+      ApiId: !Ref WebsocketApi
+      AutoDeploy: true
+      AccessLogSettings:
+        DestinationArn: !GetAtt WebsocketApiAccessLogGroup.Arn
+        Format: $context.identity.sourceIp - - [$context.requestTime] "$context.httpMethod $context.routeKey $context.protocol" $context.status $context.responseLength $context.requestId
+
+
+  # Cognito
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub user-pool-${Stage}
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: false
+          RequireNumbers: false
+          TemporaryPasswordValidityDays: 7
+
+  CognitoModeratorUserGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: 
+      Description: Users in this group can delete and set question as currently being answered.
+      # Moderator checking functionality depends on this value to be 'moderator'
+      GroupName: moderator
+      UserPoolId: !Ref CognitoUserPool
+  
+  CognitoClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub cognito-client-${Stage}
+      GenerateSecret: false
+      RefreshTokenValidity: 30
+      UserPoolId: !Ref CognitoUserPool 
+      ExplicitAuthFlows: 
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+
+  # DynamoDB
+  ConnectionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub connection-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+      - AttributeName: ChannelArn
+        AttributeType: S
+      - AttributeName: Id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: Id
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: ChannelArn-index
+        KeySchema:
+        - AttributeName: ChannelArn
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+        ProvisionedThroughput:
+          ReadCapacityUnits: '0'
+          WriteCapacityUnits: '0'
+
+  QuestionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub question-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+      - AttributeName: ChannelArn
+        AttributeType: S
+      - AttributeName: Id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: ChannelArn
+        KeyType: HASH
+      - AttributeName: Id
+        KeyType: RANGE
+
+  VoteTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub vote-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+      - AttributeName: QuestionId
+        AttributeType: S
+      - AttributeName: UserId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: UserId
+        KeyType: HASH
+      - AttributeName: QuestionId
+        KeyType: RANGE
+
+
+  # Lambdas and Lambda Permissions
+  QuestionServiceLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub question-service-${Stage}
+      CodeUri: backend/lambda/question-service
+      Handler: lambda.lambdaHandler
+      MemorySize: 128
+      Timeout: 30
+      Runtime: python3.7
+      Environment:
+        Variables:
+          AWS_DATA_PATH: /var/task/models
+          QUESTION_TABLE: !Ref QuestionTable 
+      Role: !GetAtt LambdaRole.Arn
+  
+  QuestionServiceLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref QuestionServiceLambda
+      Principal: apigateway.amazonaws.com
+    
+  VoteServiceLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub vote-service-${Stage}
+      CodeUri: backend/lambda/vote-service
+      Handler: lambda.lambdaHandler
+      MemorySize: 128
+      Timeout: 30
+      Runtime: python3.7
+      Environment:
+        Variables:
+          QUESTION_TABLE: !Ref QuestionTable 
+          VOTE_TABLE: !Ref VoteTable 
+      Role: !GetAtt LambdaRole.Arn
+  
+  VoteServiceLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VoteServiceLambda
+      Principal: apigateway.amazonaws.com
+
+  WebsocketServiceLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub websocket-service-${Stage}
+      CodeUri: backend/lambda/websocket-service
+      Handler: lambda.lambdaHandler
+      MemorySize: 128
+      Timeout: 30
+      Runtime: python3.7
+      Environment:
+        Variables:
+          CONNECTION_TABLE: !Ref ConnectionTable 
+      Role: !GetAtt LambdaRole.Arn
+  
+  WebsocketServiceLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref WebsocketServiceLambda
+      Principal: apigateway.amazonaws.com
+
+  ConnectionStreamLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub connection-stream-${Stage}
+      CodeUri: backend/lambda/connection-stream
+      Handler: lambda.lambdaHandler
+      MemorySize: 128
+      Timeout: 30
+      Runtime: python3.7
+      Environment:
+        Variables:
+          QUESTION_TABLE: !Ref QuestionTable
+          WEBSOCKET_CONNECTION_ENDPOINT: !Join [ '', [ 'https://', !Ref WebsocketApi, '.execute-api.', !Ref AWS::Region, '.amazonaws.com/', !Ref Stage] ]
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        DynamoDBConnectionStreamEvent:
+          Type: DynamoDB
+          Properties:
+            BatchSize: 100
+            Enabled: true
+            MaximumRecordAgeInSeconds: 60
+            Stream: !GetAtt ConnectionTable.StreamArn
+            StartingPosition: LATEST
+      
+  ConnectionStreamLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ConnectionStreamLambda
+      Principal: dynamodb.amazonaws.com
+
+  QuestionStreamLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub question-stream-${Stage}
+      CodeUri: backend/lambda/question-stream
+      Handler: lambda.lambdaHandler
+      MemorySize: 128
+      Timeout: 30
+      Runtime: python3.7
+      Environment:
+        Variables:
+          CONNECTION_TABLE: !Ref ConnectionTable
+          WEBSOCKET_CONNECTION_ENDPOINT: !Join [ '', [ 'https://', !Ref WebsocketApi, '.execute-api.', !Ref AWS::Region, '.amazonaws.com/', !Ref Stage] ]
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        DynamoDBQuestionStreamEvent:
+          Type: DynamoDB
+          Properties:
+            BatchSize: 100
+            Enabled: true
+            MaximumRecordAgeInSeconds: 60
+            MaximumBatchingWindowInSeconds: 1
+            Stream: !GetAtt QuestionTable.StreamArn
+            StartingPosition: LATEST
+  
+  QuestionStreamLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref QuestionStreamLambda
+      Principal: dynamodb.amazonaws.com
+
+  VoteStreamLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub vote-stream-${Stage}
+      CodeUri: backend/lambda/vote-stream
+      Handler: lambda.lambdaHandler
+      MemorySize: 128
+      Timeout: 30
+      Runtime: python3.7
+      Environment:
+        Variables:
+          QUESTION_TABLE: !Ref QuestionTable
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        DynamoDBVoteStreamEvent:
+          Type: DynamoDB
+          Properties:
+            BatchSize: 100
+            Enabled: true
+            MaximumRecordAgeInSeconds: 60
+            MaximumBatchingWindowInSeconds: 1
+            Stream: !GetAtt VoteTable.StreamArn
+            StartingPosition: LATEST
+
+  VoteStreamLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VoteStreamLambda
+      Principal: dynamodb.amazonaws.com
+
+
+  # Policies
+  IVSPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ivs:PutMetadata
+            Resource: '*'
+  
+  DynamoDBPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DeleteItem
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:Query
+              - dynamodb:BatchWriteItem
+            Resource: '*'
+
+
+  # Roles
+  ApiGatewayPushToCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Push logs to CW logs from API Gateway
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+  
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: "For lambdas to R/W DynamoDB, invoke API, invoke IVS PutMetadata, and push log to CW"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AWSLambdaInvocation-DynamoDB
+        - !Ref IVSPolicy
+        - !Ref DynamoDBPolicy
+
+
+  #Log groups
+  HttpApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/HttpApiAccessLog-${Stage}-${HttpApi}
+      RetentionInDays: 365
+
+  WebsocketApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/WebsocketApiAccessLog-${Stage}-${WebsocketApi}
+      RetentionInDays: 365
+
+
+Outputs:
+  CognitoUserPoolId:
+    Value: !Ref CognitoUserPool 
+  CognitoClientId:
+    Value: !Ref CognitoClient
+  Region:
+    Value: !Ref AWS::Region
+  WebsocketApiEndpoint:
+    Value: !Sub wss://${WebsocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  HttpApiEndpoint: 
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  
