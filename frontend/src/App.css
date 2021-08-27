@@ -31,6 +31,14 @@ header {
 
 .modal__el--auth {
   width: 450px;
+  margin-top: 0;
+}
+
+@media (max-width: 480px) { /* Large Screens */
+  .modal__el {
+    width: 100% !important;
+    height: 100vh;
+  }
 }
 
 /* Player */

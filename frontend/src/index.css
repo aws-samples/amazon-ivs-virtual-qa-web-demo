@@ -513,6 +513,22 @@ header h1 {
   padding: 2rem;
 }
 
+@media (max-width: 480px) { /* Large Screens */
+  .modal__el {
+    width: 100% !important;
+    height: calc(100vh - 5rem);
+    margin-top: 5rem;
+  }
+}
+
+.modal_icon {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  width: 2rem;
+  height: 2rem;
+}
+
 .modal__overlay {
   position: absolute;
   top: 0;

@@ -88,6 +88,9 @@ function AddQuestionModal({
     return (
         <div className="modal">
             <div className="modal__el" ref={modalRef}>
+                <div className="modal_icon" onClick={onHideModal}>
+                    <img src="/close_icon.svg" />
+                </div>
                 <h2 className="mg-b-1">Submit a question</h2>
                 <form>
                 <fieldset>
