@@ -68,6 +68,9 @@ function SignInModal({
     return (
         <div className="modal">
             <div className="modal__el modal__el--auth" ref={modalRef}>
+                <div className="modal_icon" onClick={onHideModal}>
+                    <img src="/close_icon.svg" />
+                </div>
                 <Authenticator theme={MyTheme} hideDefault={true} onStateChange={handleAuthStateChange}>
                     <SignIn/>
                     <SignUp/>
