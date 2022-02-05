@@ -6,6 +6,7 @@ website/node_modules
 /build
 website/build
 website/src/backendStackOutput.json
+frontend/build
 
 #misc
 .DS_Store
